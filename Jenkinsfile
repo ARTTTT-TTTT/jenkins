@@ -1,45 +1,51 @@
- pipeline {
-    agent any
-    parameters {
-        booleanParam(name: 'RUN_DEPLOY', defaultValue: true, description: 'Should we deploy?')
-    }
-    stages {
-        stage('Build') {
-            steps {
-                echo 'Building application...'
-            }
-        }
-        stage('Test in Parallel') {
-            parallel {
-                stage('Unit Tests') {
-                    steps {
-                        echo 'Running unit tests...'
-                        sh 'sleep 5'
-                    }
-                }
-                stage('Integration Tests') {
-                    steps {
-                        echo 'Running integration tests...'
-                        sh 'sleep 5'
-                    }
-                }
-            }
-        }
-        stage('Deploy') {
-            when {
-                expression { return params.RUN_DEPLOY }
-            }
-            steps {
-                echo 'Deploying application...'
-            }
-        }
-    }
-    post {
-      success {
-          echo 'Pipeline completed successfully 🎉'
+pipeline {
+  agent any
+  parameters {
+      booleanParam(name: 'RUN_DEPLOY', defaultValue: true, description: 'Should we deploy?')
+  }
+  stages {
+      stage('Build') {
+          steps {
+              echo 'Building application...'
+          }
       }
-      failure {
-          echo 'Pipeline failed ❌'
+      stage('Test in Parallel') {
+          parallel {
+              stage('Unit Tests') {
+                  steps {
+                      echo 'Running unit tests...'
+                      sh 'sleep 5'
+                  }
+              }
+              stage('Integration Tests') {
+                  steps {
+                      echo 'Running integration tests...'
+                      sh 'sleep 5'
+                  }
+              }
+          }
       }
+      stage('Deploy') {
+          when {
+              expression { return params.RUN_DEPLOY }
+          }
+          steps {
+              echo 'Deploying application...'
+          }
+      }
+      stage('Test') {
+        steps {
+            sh 'echo "All tests passed!" > results.txt'
+            archiveArtifacts artifacts: 'results.txt', fingerprint: true
+        }
+      }
+  }
+  post {
+    success {
+        echo 'Pipeline completed successfully 🎉'
     }
+    failure {
+        echo 'Pipeline failed ❌'
+    }
+  }
 }

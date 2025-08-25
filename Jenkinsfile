@@ -1,19 +1,36 @@
-pipeline {
+ pipeline {
     agent any
+    parameters {
+        booleanParam(name: 'RUN_DEPLOY', defaultValue: true, description: 'Should we deploy?')
+    }
     stages {
         stage('Build') {
             steps {
-                echo 'Building the application...'
+                echo 'Building application...'
             }
         }
-        stage('Test') {
-            steps {
-                echo 'Running tests...'
+        stage('Test in Parallel') {
+            parallel {
+                stage('Unit Tests') {
+                    steps {
+                        echo 'Running unit tests...'
+                        sh 'sleep 5'
+                    }
+                }
+                stage('Integration Tests') {
+                    steps {
+                        echo 'Running integration tests...'
+                        sh 'sleep 5'
+                    }
+                }
             }
         }
         stage('Deploy') {
+            when {
+                expression { return params.RUN_DEPLOY }
+            }
             steps {
-                echo 'Deploying the application...'
+                echo 'Deploying application...'
             }
         }
     }

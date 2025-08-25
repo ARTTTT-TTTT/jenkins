@@ -39,13 +39,21 @@ pipeline {
             archiveArtifacts artifacts: 'results.txt', fingerprint: true
         }
       }
+      stage('Approval') {
+        steps {
+            input "Do you want to proceed with deployment?"
+        }
+      }
   }
-  post {
+   post {
     success {
-        echo 'Pipeline completed successfully 🎉'
+        echo '✅ Pipeline finished successfully!'
     }
     failure {
-        echo 'Pipeline failed ❌'
+        echo '❌ Pipeline failed. Check logs!'
+    }
+    always {
+        echo 'Pipeline completed (success or failure).'
     }
   }
 }

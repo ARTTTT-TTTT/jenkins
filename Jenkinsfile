@@ -8,17 +8,17 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/<username>/jenkins-demo-app.git'
+                git branch: 'main', url: 'https://github.com/ARTTTT-TTTT/jenkins'
             }
         }
         stage('Build Image') {
             steps {
-                sh 'docker build -t jenkins-demo-app:latest .'
+                sh 'docker build -t jenkins:latest .'
             }
         }
         stage('Run Container') {
             steps {
-                sh 'docker run -d -p 5000:5000 --name demo-app jenkins-demo-app:latest'
+                sh 'docker run -d -p 5000:5000 --name demo-app jenkins:latest'
             }
         }
     }

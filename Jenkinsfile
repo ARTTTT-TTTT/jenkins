@@ -1,14 +1,10 @@
 pipeline {
-    agent {
-        docker {
-            image 'docker:20.10.7'
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
-        }
-    }
+    agent any
+    
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/ARTTTT-TTTT/jenkins'
+                checkout scm
             }
         }
         stage('Build Image') {
@@ -18,7 +14,11 @@ pipeline {
         }
         stage('Run Container') {
             steps {
-                sh 'docker run -d -p 5000:5000 --name demo-app jenkins-demo-app:latest'
+                sh '''
+                    docker stop demo-app || true
+                    docker rm demo-app || true
+                    docker run -d -p 5000:5000 --name demo-app jenkins-demo-app:latest
+                '''
             }
         }
     }

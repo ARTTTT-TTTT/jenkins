@@ -1,0 +1,41 @@
+# Docker Compose setup for Jenkins with Docker support
+version: '3.8'
+
+services:
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins-master
+    ports:
+      - '8080:8080'
+      - '50000:50000'
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+    user: root # Run as root to access Docker socket
+    environment:
+      - JENKINS_OPTS="--httpPort=8080"
+    networks:
+      - jenkins-network
+
+  docker-dind:
+    image: docker:20.10.7-dind
+    container_name: jenkins-docker
+    privileged: true
+    ports:
+      - '2376:2376'
+    volumes:
+      - jenkins-docker-certs:/certs/client
+      - jenkins_home:/var/jenkins_home
+    environment:
+      - DOCKER_TLS_CERTDIR=/certs
+    networks:
+      - jenkins-network
+
+volumes:
+  jenkins_home:
+  jenkins-docker-certs:
+
+networks:
+  jenkins-network:
+    driver: bridge

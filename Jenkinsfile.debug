@@ -1,0 +1,85 @@
+pipeline {
+    agent any
+    
+    environment {
+        PATH = "/usr/local/bin:/usr/bin:/bin:${env.PATH}"
+        DOCKER_IMAGE = 'jenkins-demo-app'
+        CONTAINER_NAME = 'demo-app'
+    }
+    
+    stages {
+        stage('Check Environment') {
+            steps {
+                sh 'echo "Current user: $(whoami)"'
+                sh 'echo "PATH: $PATH"'
+                sh 'which docker || echo "Docker not found in PATH"'
+                sh 'ls -la /usr/bin/docker || echo "Docker not found in /usr/bin"'
+                sh 'ls -la /usr/local/bin/docker || echo "Docker not found in /usr/local/bin"'
+                sh 'ls -la /var/run/docker.sock || echo "Docker socket not found"'
+            }
+        }
+        
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build Image') {
+            steps {
+                script {
+                    // Try different ways to access docker
+                    def dockerCmd = ''
+                    try {
+                        sh 'docker --version'
+                        dockerCmd = 'docker'
+                    } catch (Exception e1) {
+                        try {
+                            sh '/usr/bin/docker --version'
+                            dockerCmd = '/usr/bin/docker'
+                        } catch (Exception e2) {
+                            try {
+                                sh '/usr/local/bin/docker --version'
+                                dockerCmd = '/usr/local/bin/docker'
+                            } catch (Exception e3) {
+                                error "Docker not found in any expected location"
+                            }
+                        }
+                    }
+                    
+                    sh "${dockerCmd} build -t ${DOCKER_IMAGE}:latest ."
+                }
+            }
+        }
+        
+        stage('Stop Previous Container') {
+            steps {
+                script {
+                    sh """
+                        docker stop ${CONTAINER_NAME} 2>/dev/null || echo 'No container to stop'
+                        docker rm ${CONTAINER_NAME} 2>/dev/null || echo 'No container to remove'
+                    """
+                }
+            }
+        }
+        
+        stage('Run Container') {
+            steps {
+                sh "docker run -d -p 5000:5000 --name ${CONTAINER_NAME} ${DOCKER_IMAGE}:latest"
+            }
+        }
+        
+        stage('Verify') {
+            steps {
+                sh 'sleep 5'
+                sh "docker ps | grep ${CONTAINER_NAME}"
+            }
+        }
+    }
+    
+    post {
+        failure {
+            sh "docker logs ${CONTAINER_NAME} 2>/dev/null || echo 'No logs available'"
+        }
+    }
+}

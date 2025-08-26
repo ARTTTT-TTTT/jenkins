@@ -13,7 +13,7 @@ pipeline {
         }
         stage('Run Container') {
             steps {
-                sh 'docker run -d -p 5000:5000 --name demo-app jenkins-demo-app:latest'
+                sh 'docker run -d -p 5001:5000 --name demo-app jenkins-demo-app:latest'
             }
         }
     }

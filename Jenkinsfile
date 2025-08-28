@@ -22,12 +22,15 @@ pipeline {
             steps {
                 script {
                     echo 'Building project with Maven...'
+                    echo "Workspace: ${WORKSPACE}"
+                    echo "Project Path: ${PROJECT_PATH}"
+                    sh 'ls -la'  // Debug: show current directory contents
                     sh """
                         docker run --rm --name maven-build \\
-                        -v "${PROJECT_PATH}:/usr/src/mymaven" \\
+                        -v "\$(pwd):/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
-                        mvn clean install
+                        sh -c "ls -la && mvn clean install"
                     """
                 }
             }
@@ -39,7 +42,7 @@ pipeline {
                     echo 'Running unit tests...'
                     sh """
                         docker run --rm --name maven-test \\
-                        -v "${PROJECT_PATH}:/usr/src/mymaven" \\
+                        -v "\$(pwd):/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         mvn test
@@ -66,7 +69,7 @@ pipeline {
                         sh """
                             docker run --rm --name maven-sonar \\
                             --network host \\
-                            -v "${PROJECT_PATH}:/usr/src/mymaven" \\
+                            -v "\$(pwd):/usr/src/mymaven" \\
                             -w /usr/src/mymaven \\
                             maven:3.9.9 \\
                             mvn clean verify sonar:sonar \\
@@ -86,7 +89,7 @@ pipeline {
                     echo 'Creating final package...'
                     sh """
                         docker run --rm --name maven-package \\
-                        -v "${PROJECT_PATH}:/usr/src/mymaven" \\
+                        -v "\$(pwd):/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         mvn package

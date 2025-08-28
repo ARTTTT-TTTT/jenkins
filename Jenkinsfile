@@ -25,18 +25,21 @@ pipeline {
             steps {
                 sh 'ls -la ${WORKSPACE}'
                 sh 'test -f ${WORKSPACE}/pom.xml && echo "pom.xml found" || echo "pom.xml NOT found"'
+                sh 'pwd'
             }
         }
         
         stage('Build & Test') {
             steps {
                 sh '''
-                # Create a temporary directory and copy files
-                docker run -i --rm --name maven-build \
-                  -v ${WORKSPACE}:/source:ro \
-                  -w /app \
-                  maven:3.9.9 \
-                  sh -c "cp -r /source/* /app/ && ls -la /app/ && mvn clean compile test"
+                # Create Maven container and copy files
+                docker create --name maven-build-temp -w /app maven:3.9.9 sleep 30
+                docker start maven-build-temp
+                docker cp ${WORKSPACE}/. maven-build-temp:/app/
+                docker exec maven-build-temp ls -la /app/
+                docker exec maven-build-temp mvn clean compile test
+                docker stop maven-build-temp
+                docker rm maven-build-temp
                 '''
             }
         }
@@ -44,12 +47,15 @@ pipeline {
         stage('Package') {
             steps {
                 sh '''
-                docker run -i --rm --name maven-package \
-                  -v ${WORKSPACE}:/source:ro \
-                  -v ${WORKSPACE}/target:/app/target \
-                  -w /app \
-                  maven:3.9.9 \
-                  sh -c "cp -r /source/* /app/ && mvn package && cp -r /app/target/* /source/target/"
+                # Create Maven container for packaging
+                docker create --name maven-package-temp -w /app maven:3.9.9 sleep 30
+                docker start maven-package-temp
+                docker cp ${WORKSPACE}/. maven-package-temp:/app/
+                docker exec maven-package-temp mvn package
+                # Copy target folder back
+                docker cp maven-package-temp:/app/target/. ${WORKSPACE}/target/
+                docker stop maven-package-temp
+                docker rm maven-package-temp
                 '''
             }
         }
@@ -57,16 +63,17 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 sh '''
-                docker run -i --rm --name maven-sonar \
-                  --network bridge \
-                  -v ${WORKSPACE}:/source:ro \
-                  -w /app \
-                  maven:3.9.9 \
-                  sh -c "cp -r /source/* /app/ && mvn clean verify sonar:sonar \
-                    -Dsonar.projectKey=${PROJECT_KEY} \
-                    -Dsonar.projectName='${PROJECT_NAME}' \
-                    -Dsonar.host.url=${SONAR_HOST_URL} \
-                    -Dsonar.token=${SONAR_TOKEN}"
+                # Create Maven container for SonarQube analysis
+                docker create --name maven-sonar-temp --network bridge -w /app maven:3.9.9 sleep 60
+                docker start maven-sonar-temp
+                docker cp ${WORKSPACE}/. maven-sonar-temp:/app/
+                docker exec maven-sonar-temp mvn clean verify sonar:sonar \
+                  -Dsonar.projectKey=${PROJECT_KEY} \
+                  -Dsonar.projectName="${PROJECT_NAME}" \
+                  -Dsonar.host.url=${SONAR_HOST_URL} \
+                  -Dsonar.token=${SONAR_TOKEN}
+                docker stop maven-sonar-temp
+                docker rm maven-sonar-temp
                 '''
             }
         }
@@ -86,7 +93,11 @@ pipeline {
     
     post {
         always {
-            sh 'docker ps -aq --filter "name=maven-" | xargs -r docker rm -f || echo "No Maven containers to clean"'
+            // Clean up any remaining containers
+            sh '''
+            docker ps -aq --filter "name=maven-" | xargs -r docker stop || echo "No containers to stop"
+            docker ps -aq --filter "name=maven-" | xargs -r docker rm -f || echo "No containers to clean"
+            '''
         }
         success {
             echo 'Pipeline completed successfully!'

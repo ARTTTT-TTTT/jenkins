@@ -9,6 +9,16 @@ pipeline {
     }
 
     stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    echo 'Checking out source code...'
+                    checkout scm
+                    sh 'ls -la'  // Debug: show files after checkout
+                }
+            }
+        }
+        
         stage('Maven Check') {
             steps {
                 script {
@@ -23,11 +33,10 @@ pipeline {
                 script {
                     echo 'Building project with Maven...'
                     echo "Workspace: ${WORKSPACE}"
-                    echo "Project Path: ${PROJECT_PATH}"
-                    sh 'ls -la'  // Debug: show current directory contents
+                    sh 'pwd && ls -la'  // Debug: show current directory contents
                     sh """
                         docker run --rm --name maven-build \\
-                        -v "\$(pwd):/usr/src/mymaven" \\
+                        -v "${WORKSPACE}:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         sh -c "ls -la && mvn clean install"
@@ -42,7 +51,7 @@ pipeline {
                     echo 'Running unit tests...'
                     sh """
                         docker run --rm --name maven-test \\
-                        -v "\$(pwd):/usr/src/mymaven" \\
+                        -v "${WORKSPACE}:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         mvn test
@@ -69,7 +78,7 @@ pipeline {
                         sh """
                             docker run --rm --name maven-sonar \\
                             --network host \\
-                            -v "\$(pwd):/usr/src/mymaven" \\
+                            -v "${WORKSPACE}:/usr/src/mymaven" \\
                             -w /usr/src/mymaven \\
                             maven:3.9.9 \\
                             mvn clean verify sonar:sonar \\
@@ -89,7 +98,7 @@ pipeline {
                     echo 'Creating final package...'
                     sh """
                         docker run --rm --name maven-package \\
-                        -v "\$(pwd):/usr/src/mymaven" \\
+                        -v "${WORKSPACE}:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         mvn package

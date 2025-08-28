@@ -50,9 +50,10 @@ pipeline {
                         error "pom.xml not found in workspace! Please check SCM configuration."
                     }
                     
+                    // Use quotes to handle spaces in path
                     sh """
                         docker run --rm --name maven-build \\
-                        -v "${WORKSPACE}:/usr/src/mymaven" \\
+                        -v "\${WORKSPACE}:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         sh -c "pwd && ls -la && cat pom.xml | head -10 && mvn clean install"
@@ -67,7 +68,7 @@ pipeline {
                     echo 'Running unit tests...'
                     sh """
                         docker run --rm --name maven-test \\
-                        -v "${WORKSPACE}:/usr/src/mymaven" \\
+                        -v "\${WORKSPACE}:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         mvn test
@@ -94,14 +95,14 @@ pipeline {
                         sh """
                             docker run --rm --name maven-sonar \\
                             --network host \\
-                            -v "${WORKSPACE}:/usr/src/mymaven" \\
+                            -v "\${WORKSPACE}:/usr/src/mymaven" \\
                             -w /usr/src/mymaven \\
                             maven:3.9.9 \\
                             mvn clean verify sonar:sonar \\
                             -Dsonar.projectKey=jenkins-test \\
                             -Dsonar.projectName='Jenkins Test Project' \\
-                            -Dsonar.host.url=${SONAR_HOST_URL} \\
-                            -Dsonar.token=${SONAR_TOKEN}
+                            -Dsonar.host.url=\${SONAR_HOST_URL} \\
+                            -Dsonar.token=\${SONAR_TOKEN}
                         """
                     }
                 }
@@ -114,7 +115,7 @@ pipeline {
                     echo 'Creating final package...'
                     sh """
                         docker run --rm --name maven-package \\
-                        -v "${WORKSPACE}:/usr/src/mymaven" \\
+                        -v "\${WORKSPACE}:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         mvn package

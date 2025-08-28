@@ -50,14 +50,19 @@ pipeline {
                         error "pom.xml not found in workspace! Please check SCM configuration."
                     }
                     
-                    // Use single quotes to prevent shell expansion, escape the WORKSPACE properly
-                    def workspace = env.WORKSPACE
+                    // Debug: Print actual workspace path and test Docker mount
+                    sh 'echo "Current directory contents:" && ls -la'
+                    sh 'echo "Workspace variable: $WORKSPACE"'
+                    
+                    // Use pwd instead of WORKSPACE variable to ensure correct path
                     sh """
+                        CURRENT_DIR=\$(pwd)
+                        echo "Using directory: \$CURRENT_DIR"
                         docker run --rm --name maven-build \\
-                        -v '${workspace}:/usr/src/mymaven' \\
+                        -v "\$CURRENT_DIR:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
-                        sh -c 'pwd && ls -la && cat pom.xml | head -10 && mvn clean install'
+                        sh -c 'pwd && ls -la && echo "Files found:" && find . -name "*.xml" -o -name "*.java" | head -10 && mvn clean install'
                     """
                 }
             }
@@ -67,10 +72,11 @@ pipeline {
             steps {
                 script {
                     echo 'Running unit tests...'
-                    def workspace = env.WORKSPACE
                     sh """
+                        CURRENT_DIR=\$(pwd)
+                        echo "Using directory for tests: \$CURRENT_DIR"
                         docker run --rm --name maven-test \\
-                        -v '${workspace}:/usr/src/mymaven' \\
+                        -v "\$CURRENT_DIR:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         mvn test
@@ -93,12 +99,13 @@ pipeline {
             steps {
                 script {
                     echo 'Running SonarQube analysis...'
-                    def workspace = env.WORKSPACE
                     withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                         sh """
+                            CURRENT_DIR=\$(pwd)
+                            echo "Using directory for SonarQube: \$CURRENT_DIR"
                             docker run --rm --name maven-sonar \\
                             --network host \\
-                            -v '${workspace}:/usr/src/mymaven' \\
+                            -v "\$CURRENT_DIR:/usr/src/mymaven" \\
                             -w /usr/src/mymaven \\
                             maven:3.9.9 \\
                             mvn clean verify sonar:sonar \\
@@ -116,10 +123,11 @@ pipeline {
             steps {
                 script {
                     echo 'Creating final package...'
-                    def workspace = env.WORKSPACE
                     sh """
+                        CURRENT_DIR=\$(pwd)
+                        echo "Using directory for packaging: \$CURRENT_DIR"
                         docker run --rm --name maven-package \\
-                        -v '${workspace}:/usr/src/mymaven' \\
+                        -v "\$CURRENT_DIR:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
                         mvn package

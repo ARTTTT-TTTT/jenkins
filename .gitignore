@@ -31,6 +31,9 @@ Thumbs.db
 
 # Jenkins
 .jenkins
+jenkins_home/
+JENKINS_HOME/
+.jenkins_home
 
 # Logs
 *.log

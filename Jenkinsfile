@@ -1,27 +1,118 @@
 pipeline {
     agent any
+
+    environment {
+        SONAR_HOST_URL = 'http://localhost:9000'
+        // SonarQube token should be configured as Jenkins credential
+        // SONAR_TOKEN will be injected from Jenkins credentials
+        PROJECT_PATH = "${WORKSPACE}"
+    }
+
     stages {
-        stage('Checkout') {
+        stage('Maven Check') {
             steps {
-                git branch: 'main', url: 'https://github.com/ARTTTT-TTTT/jenkins'
+                script {
+                    echo 'Checking Maven version...'
+                    sh 'docker run --rm --name maven-check maven:3.9.9 mvn --version'
+                }
             }
         }
-        stage('Build Image') {
+        
+        stage('Build') {
             steps {
-                sh 'docker build -t jenkins-demo-app:latest .'
+                script {
+                    echo 'Building project with Maven...'
+                    sh """
+                        docker run --rm --name maven-build \\
+                        -v "${PROJECT_PATH}:/usr/src/mymaven" \\
+                        -w /usr/src/mymaven \\
+                        maven:3.9.9 \\
+                        mvn clean install
+                    """
+                }
             }
         }
-        stage('Run Container') {
-            steps {
-                sh 'docker rm -f demo-app || true'
-                sh 'docker run -d -p 8081:8081 --name demo-app jenkins-demo-app:latest'
-            }
-        }
+        
         stage('Test') {
             steps {
-                sh 'echo "Running tests..."'
-                sh 'pytest || true'
+                script {
+                    echo 'Running unit tests...'
+                    sh """
+                        docker run --rm --name maven-test \\
+                        -v "${PROJECT_PATH}:/usr/src/mymaven" \\
+                        -w /usr/src/mymaven \\
+                        maven:3.9.9 \\
+                        mvn test
+                    """
+                }
             }
+            post {
+                always {
+                    // Publish test results if they exist
+                    script {
+                        if (fileExists('target/surefire-reports/*.xml')) {
+                            junit 'target/surefire-reports/*.xml'
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    echo 'Running SonarQube analysis...'
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                            docker run --rm --name maven-sonar \\
+                            --network host \\
+                            -v "${PROJECT_PATH}:/usr/src/mymaven" \\
+                            -w /usr/src/mymaven \\
+                            maven:3.9.9 \\
+                            mvn clean verify sonar:sonar \\
+                            -Dsonar.projectKey=jenkins-test \\
+                            -Dsonar.projectName='Jenkins Test Project' \\
+                            -Dsonar.host.url=${SONAR_HOST_URL} \\
+                            -Dsonar.token=${SONAR_TOKEN}
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                script {
+                    echo 'Creating final package...'
+                    sh """
+                        docker run --rm --name maven-package \\
+                        -v "${PROJECT_PATH}:/usr/src/mymaven" \\
+                        -w /usr/src/mymaven \\
+                        maven:3.9.9 \\
+                        mvn package
+                    """
+                }
+            }
+            post {
+                success {
+                    // Archive the built artifacts
+                    archiveArtifacts artifacts: 'target/*.jar', allowEmptyArchive: true
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Pipeline completed!'
+            // Clean up workspace if needed
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline executed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed! Check the logs for details.'
         }
     }
 }

@@ -16,28 +16,12 @@ pipeline {
                     // Clean workspace first
                     deleteDir()
                     
-                    // Try multiple checkout methods
-                    try {
-                        // Method 1: Standard SCM checkout
-                        checkout scm
-                        echo "✅ Standard SCM checkout successful"
-                    } catch (Exception e) {
-                        echo "❌ Standard SCM failed: ${e.getMessage()}"
-                        
-                        // Method 2: Manual Git checkout (if needed)
-                        // Uncomment and modify if you have Git repository
-                        /*
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: 'main']],
-                            userRemoteConfigs: [[url: 'https://github.com/ARTTTT-TTTT/jenkins.git']]
-                        ])
-                        */
-                    }
-                    
-                    // Debug: show all files
-                    sh 'pwd && ls -la'
-                    sh 'find . -name "pom.xml" -type f || echo "No pom.xml found"'
+                    // Manual Git checkout
+                    sh """
+                        git clone https://github.com/ARTTTT-TTTT/jenkins.git .
+                        ls -la
+                        find . -name "pom.xml" -type f || echo "No pom.xml found"
+                    """
                 }
             }
         }

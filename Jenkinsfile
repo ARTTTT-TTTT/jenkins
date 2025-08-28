@@ -1,143 +1,72 @@
 pipeline {
     agent any
-
+    
     environment {
-        SONAR_HOST_URL = 'http://localhost:9000'
-        // SonarQube token should be configured as Jenkins credential
-        // SONAR_TOKEN will be injected from Jenkins credentials
-        PROJECT_PATH = "${WORKSPACE}"
+        SONAR_TOKEN = 'sqp_67395eac9b677bfa67358564e3aba1aed1e11622'
+        SONAR_HOST_URL = 'http://172.17.0.3:9000'
+        PROJECT_KEY = 'test'
+        PROJECT_NAME = 'test'
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                script {
-                    echo 'Checking out source code...'
-                    // Clean workspace first
-                    deleteDir()
-                    
-                    // Manual Git checkout
-                    sh """
-                        git clone https://github.com/ARTTTT-TTTT/jenkins.git .
-                        ls -la
-                        find . -name "pom.xml" -type f || echo "No pom.xml found"
-                    """
-                }
-            }
-        }
-        
         stage('Maven Check') {
             steps {
-                script {
-                    echo 'Checking Maven version...'
-                    sh 'docker run --rm --name maven-check maven:3.9.9 mvn --version'
-                }
+                bat 'docker run -i --rm --name my-maven-check maven:3.9.9 mvn --version'
             }
         }
         
-        stage('Build') {
+        stage('Checkout') {
             steps {
-                script {
-                    echo 'Building project with Maven...'
-                    echo "Workspace: ${WORKSPACE}"
-                    sh 'pwd && ls -la'
-                    
-                    // Check if pom.xml exists
-                    def pomExists = fileExists('pom.xml')
-                    echo "POM exists: ${pomExists}"
-                    
-                    if (!pomExists) {
-                        error "pom.xml not found in workspace! Please check SCM configuration."
-                    }
-                    
-                    // Debug: Print actual workspace path and test Docker mount
-                    sh 'echo "Current directory contents:" && ls -la'
-                    sh 'echo "Workspace variable: $WORKSPACE"'
-                    
-                    // Use pwd instead of WORKSPACE variable to ensure correct path
-                    sh """
-                        CURRENT_DIR=\$(pwd)
-                        echo "Using directory: \$CURRENT_DIR"
-                        docker run --rm --name maven-build \\
-                        -v "\$CURRENT_DIR:/usr/src/mymaven" \\
-                        -w /usr/src/mymaven \\
-                        maven:3.9.9 \\
-                        sh -c 'pwd && ls -la && echo "Files found:" && find . -name "*.xml" -o -name "*.java" | head -10 && mvn clean install'
-                    """
-                }
+                checkout scm
             }
         }
         
-        stage('Test') {
+        stage('Build & Test') {
             steps {
-                script {
-                    echo 'Running unit tests...'
-                    sh """
-                        CURRENT_DIR=\$(pwd)
-                        echo "Using directory for tests: \$CURRENT_DIR"
-                        docker run --rm --name maven-test \\
-                        -v "\$CURRENT_DIR:/usr/src/mymaven" \\
-                        -w /usr/src/mymaven \\
-                        maven:3.9.9 \\
-                        mvn test
-                    """
-                }
-            }
-            post {
-                always {
-                    // Publish test results if they exist
-                    script {
-                        if (fileExists('target/surefire-reports/*.xml')) {
-                            junit 'target/surefire-reports/*.xml'
-                        }
-                    }
-                }
-            }
-        }
-        
-        stage('SonarQube Analysis') {
-            steps {
-                script {
-                    echo 'Running SonarQube analysis...'
-                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                        sh """
-                            CURRENT_DIR=\$(pwd)
-                            echo "Using directory for SonarQube: \$CURRENT_DIR"
-                            docker run --rm --name maven-sonar \\
-                            --network host \\
-                            -v "\$CURRENT_DIR:/usr/src/mymaven" \\
-                            -w /usr/src/mymaven \\
-                            maven:3.9.9 \\
-                            mvn clean verify sonar:sonar \\
-                            -Dsonar.projectKey=jenkins-test \\
-                            -Dsonar.projectName='Jenkins Test Project' \\
-                            -Dsonar.host.url=\${SONAR_HOST_URL} \\
-                            -Dsonar.token=\${SONAR_TOKEN}
-                        """
-                    }
-                }
+                bat '''
+                docker run -i --rm --name my-maven-build ^
+                  -v "%WORKSPACE%:/usr/src/mymaven" ^
+                  -w /usr/src/mymaven maven:3.9.9 ^
+                  mvn clean compile test
+                '''
             }
         }
         
         stage('Package') {
             steps {
-                script {
-                    echo 'Creating final package...'
-                    sh """
-                        CURRENT_DIR=\$(pwd)
-                        echo "Using directory for packaging: \$CURRENT_DIR"
-                        docker run --rm --name maven-package \\
-                        -v "\$CURRENT_DIR:/usr/src/mymaven" \\
-                        -w /usr/src/mymaven \\
-                        maven:3.9.9 \\
-                        mvn package
-                    """
-                }
+                bat '''
+                docker run -i --rm --name my-maven-package ^
+                  -v "%WORKSPACE%:/usr/src/mymaven" ^
+                  -w /usr/src/mymaven maven:3.9.9 ^
+                  mvn package
+                '''
             }
-            post {
-                success {
-                    // Archive the built artifacts
-                    archiveArtifacts artifacts: 'target/*.jar', allowEmptyArchive: true
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                bat '''
+                docker run -i --rm --name my-maven-sonar ^
+                  -v "%WORKSPACE%:/usr/src/mymaven" ^
+                  -w /usr/src/mymaven maven:3.9.9 ^
+                  mvn clean verify sonar:sonar ^
+                  -Dsonar.projectKey=%PROJECT_KEY% ^
+                  -Dsonar.projectName="%PROJECT_NAME%" ^
+                  -Dsonar.host.url=%SONAR_HOST_URL% ^
+                  -Dsonar.token=%SONAR_TOKEN%
+                '''
+            }
+        }
+        
+        stage('Quality Gate') {
+            steps {
+                script {
+                    timeout(time: 1, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                        }
+                    }
                 }
             }
         }
@@ -145,15 +74,18 @@ pipeline {
     
     post {
         always {
-            echo 'Pipeline completed!'
-            // Clean up workspace if needed
-            cleanWs()
+            // Clean up any remaining containers
+            bat '''
+            docker ps -aq --filter "name=my-maven-" | findstr . && docker rm -f $(docker ps -aq --filter "name=my-maven-") || echo "No containers to clean"
+            '''
         }
         success {
-            echo 'Pipeline executed successfully!'
+            echo 'Pipeline completed successfully!'
+            echo 'SonarQube Analysis: %SONAR_HOST_URL%/dashboard?id=%PROJECT_KEY%'
         }
         failure {
-            echo 'Pipeline failed! Check the logs for details.'
+            echo 'Pipeline failed!'
         }
     }
 }
+

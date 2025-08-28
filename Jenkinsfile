@@ -11,7 +11,7 @@ pipeline {
     stages {
         stage('Maven Check') {
             steps {
-                sh 'docker run -i --rm --name my-maven-check maven:3.9.9 mvn --version'
+                sh 'docker run -i --rm maven:3.9.9 mvn --version'
             }
         }
         
@@ -21,12 +21,21 @@ pipeline {
             }
         }
         
+        stage('Verify Files') {
+            steps {
+                sh 'ls -la ${WORKSPACE}'
+                sh 'test -f ${WORKSPACE}/pom.xml && echo "pom.xml found" || echo "pom.xml NOT found"'
+            }
+        }
+        
         stage('Build & Test') {
             steps {
                 sh '''
-                docker run -i --rm --name my-maven-build \
-                  -v "${WORKSPACE}:/usr/src/mymaven" \
-                  -w /usr/src/mymaven maven:3.9.9 \
+                docker run -i --rm \
+                  --network bridge \
+                  -v jenkins_home:/var/jenkins_home \
+                  -w /var/jenkins_home/workspace/pipeline \
+                  maven:3.9.9 \
                   mvn clean compile test
                 '''
             }
@@ -35,9 +44,11 @@ pipeline {
         stage('Package') {
             steps {
                 sh '''
-                docker run -i --rm --name my-maven-package \
-                  -v "${WORKSPACE}:/usr/src/mymaven" \
-                  -w /usr/src/mymaven maven:3.9.9 \
+                docker run -i --rm \
+                  --network bridge \
+                  -v jenkins_home:/var/jenkins_home \
+                  -w /var/jenkins_home/workspace/pipeline \
+                  maven:3.9.9 \
                   mvn package
                 '''
             }
@@ -46,9 +57,11 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 sh '''
-                docker run -i --rm --name my-maven-sonar \
-                  -v "${WORKSPACE}:/usr/src/mymaven" \
-                  -w /usr/src/mymaven maven:3.9.9 \
+                docker run -i --rm \
+                  --network bridge \
+                  -v jenkins_home:/var/jenkins_home \
+                  -w /var/jenkins_home/workspace/pipeline \
+                  maven:3.9.9 \
                   mvn clean verify sonar:sonar \
                   -Dsonar.projectKey=${PROJECT_KEY} \
                   -Dsonar.projectName="${PROJECT_NAME}" \
@@ -62,7 +75,6 @@ pipeline {
             steps {
                 script {
                     timeout(time: 2, unit: 'MINUTES') {
-                        // Wait for webhook from SonarQube
                         sleep 10
                         echo "SonarQube analysis completed!"
                         echo "Check the results at: ${SONAR_HOST_URL}/dashboard?id=${PROJECT_KEY}"
@@ -74,10 +86,7 @@ pipeline {
     
     post {
         always {
-            // Clean up any remaining containers
-            sh '''
-            docker ps -aq --filter "name=my-maven-" | xargs -r docker rm -f || echo "No containers to clean"
-            '''
+            sh 'docker ps -aq --filter "ancestor=maven:3.9.9" | xargs -r docker rm -f || echo "No containers to clean"'
         }
         success {
             echo 'Pipeline completed successfully!'

@@ -13,8 +13,31 @@ pipeline {
             steps {
                 script {
                     echo 'Checking out source code...'
-                    checkout scm
-                    sh 'ls -la'  // Debug: show files after checkout
+                    // Clean workspace first
+                    deleteDir()
+                    
+                    // Try multiple checkout methods
+                    try {
+                        // Method 1: Standard SCM checkout
+                        checkout scm
+                        echo "✅ Standard SCM checkout successful"
+                    } catch (Exception e) {
+                        echo "❌ Standard SCM failed: ${e.getMessage()}"
+                        
+                        // Method 2: Manual Git checkout (if needed)
+                        // Uncomment and modify if you have Git repository
+                        /*
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: 'main']],
+                            userRemoteConfigs: [[url: 'https://github.com/ARTTTT-TTTT/jenkins.git']]
+                        ])
+                        */
+                    }
+                    
+                    // Debug: show all files
+                    sh 'pwd && ls -la'
+                    sh 'find . -name "pom.xml" -type f || echo "No pom.xml found"'
                 }
             }
         }
@@ -33,13 +56,22 @@ pipeline {
                 script {
                     echo 'Building project with Maven...'
                     echo "Workspace: ${WORKSPACE}"
-                    sh 'pwd && ls -la'  // Debug: show current directory contents
+                    sh 'pwd && ls -la'
+                    
+                    // Check if pom.xml exists
+                    def pomExists = fileExists('pom.xml')
+                    echo "POM exists: ${pomExists}"
+                    
+                    if (!pomExists) {
+                        error "pom.xml not found in workspace! Please check SCM configuration."
+                    }
+                    
                     sh """
                         docker run --rm --name maven-build \\
                         -v "${WORKSPACE}:/usr/src/mymaven" \\
                         -w /usr/src/mymaven \\
                         maven:3.9.9 \\
-                        sh -c "ls -la && mvn clean install"
+                        sh -c "pwd && ls -la && cat pom.xml | head -10 && mvn clean install"
                     """
                 }
             }

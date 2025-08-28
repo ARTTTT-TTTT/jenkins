@@ -31,12 +31,12 @@ pipeline {
         stage('Build & Test') {
             steps {
                 sh '''
-                docker run -i --rm \
-                  --network bridge \
-                  -v jenkins_home:/var/jenkins_home \
-                  -w /var/jenkins_home/workspace/pipeline \
+                # Create a temporary directory and copy files
+                docker run -i --rm --name maven-build \
+                  -v ${WORKSPACE}:/source:ro \
+                  -w /app \
                   maven:3.9.9 \
-                  mvn clean compile test
+                  sh -c "cp -r /source/* /app/ && ls -la /app/ && mvn clean compile test"
                 '''
             }
         }
@@ -44,12 +44,12 @@ pipeline {
         stage('Package') {
             steps {
                 sh '''
-                docker run -i --rm \
-                  --network bridge \
-                  -v jenkins_home:/var/jenkins_home \
-                  -w /var/jenkins_home/workspace/pipeline \
+                docker run -i --rm --name maven-package \
+                  -v ${WORKSPACE}:/source:ro \
+                  -v ${WORKSPACE}/target:/app/target \
+                  -w /app \
                   maven:3.9.9 \
-                  mvn package
+                  sh -c "cp -r /source/* /app/ && mvn package && cp -r /app/target/* /source/target/"
                 '''
             }
         }
@@ -57,16 +57,16 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 sh '''
-                docker run -i --rm \
+                docker run -i --rm --name maven-sonar \
                   --network bridge \
-                  -v jenkins_home:/var/jenkins_home \
-                  -w /var/jenkins_home/workspace/pipeline \
+                  -v ${WORKSPACE}:/source:ro \
+                  -w /app \
                   maven:3.9.9 \
-                  mvn clean verify sonar:sonar \
-                  -Dsonar.projectKey=${PROJECT_KEY} \
-                  -Dsonar.projectName="${PROJECT_NAME}" \
-                  -Dsonar.host.url=${SONAR_HOST_URL} \
-                  -Dsonar.token=${SONAR_TOKEN}
+                  sh -c "cp -r /source/* /app/ && mvn clean verify sonar:sonar \
+                    -Dsonar.projectKey=${PROJECT_KEY} \
+                    -Dsonar.projectName='${PROJECT_NAME}' \
+                    -Dsonar.host.url=${SONAR_HOST_URL} \
+                    -Dsonar.token=${SONAR_TOKEN}"
                 '''
             }
         }
@@ -86,7 +86,7 @@ pipeline {
     
     post {
         always {
-            sh 'docker ps -aq --filter "ancestor=maven:3.9.9" | xargs -r docker rm -f || echo "No containers to clean"'
+            sh 'docker ps -aq --filter "name=maven-" | xargs -r docker rm -f || echo "No Maven containers to clean"'
         }
         success {
             echo 'Pipeline completed successfully!'

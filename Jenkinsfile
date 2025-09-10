@@ -10,7 +10,9 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git branch: 'feature', url: 'https://github.com/ARTTTT-TTTT/jenkins'
+                // Use the pipeline's configured SCM. This avoids hardcoding a branch (e.g. 'feature')
+                // which may not exist on the remote and causes checkout failures.
+                checkout scm
                 sh 'echo "=== FILES AFTER CHECKOUT ==="; ls -la'
             }
         }

@@ -10,22 +10,26 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                // Use the pipeline's configured SCM. This avoids hardcoding a branch (e.g. 'feature')
-                // which may not exist on the remote and causes checkout failures.
-                checkout scm
+                git branch: 'feature', url: 'https://github.com/ARTTTT-TTTT/jenkins'
                 sh 'echo "=== FILES AFTER CHECKOUT ==="; ls -la'
             }
         }
 
         stage('Run Tests & Coverage') {
+            agent {
+                docker {
+                    image 'python:3.11'
+                }
+            }
             steps {
-                // Run tests inside an ephemeral python container using the host Docker daemon.
-                // This avoids using the declarative 'docker' agent which may not be available
-                // on this Jenkins instance (plugin not installed).
                 sh '''
                 echo "Running tests inside Docker container..."
-                docker run --rm -v "${PWD}":/usr/src -w /usr/src python:3.11 bash -lc "python -m venv venv && . venv/bin/activate && pip install --no-cache-dir -r requirements.txt && pytest --maxfail=1 --disable-warnings -q --cov=app --cov-report=xml"
-                echo "Tests completed (exit status $? if any)."
+                python -m venv venv
+                . venv/bin/activate
+                pip install --no-cache-dir -r requirements.txt
+                echo "Dependencies installed. Running tests..."
+                pytest --maxfail=1 --disable-warnings -q --cov=app --cov-report=xml
+                echo "Tests completed successfully."
                 '''
             }
         }
@@ -45,15 +49,25 @@ pipeline {
         }
 
         stage('Build Docker Image') {
+            agent {
+                docker {
+                    image 'docker:19.03.13'
+                    args "-w /workspace -v ${pwd()}:/workspace -v /var/run/docker.sock:/var/run/docker.sock"
+                }
+            }
             steps {
-                // Build using the host Docker CLI. Jenkins agent must have Docker access (socket)
                 sh 'docker build -t fastapi-clean-demo:latest .'
             }
         }
 
         stage('Deploy Container') {
+            agent {
+                docker {
+                    image 'docker:19.03.13'
+                    args "-w /workspace -v ${pwd()}:/workspace -v /var/run/docker.sock:/var/run/docker.sock"
+                }
+            }
             steps {
-                // Deploy using host Docker CLI
                 sh '''
                 docker stop fastapi_app || true
                 docker rm fastapi_app || true

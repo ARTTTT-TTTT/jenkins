@@ -10,7 +10,17 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git branch: 'feature', url: 'https://github.com/ARTTTT-TTTT/jenkins.git'
+                // Try the pipeline-configured SCM first; if that fails (missing branch),
+                // fallback to the repository 'main' branch to avoid aborting the build.
+                script {
+                    try {
+                        echo "Attempting to checkout using pipeline-configured SCM..."
+                        checkout scm
+                    } catch (err) {
+                        echo "Primary checkout failed: ${err}. Falling back to 'main' branch."
+                        checkout([$class: 'GitSCM', branches: [[name: 'refs/heads/main']], userRemoteConfigs: [[url: 'https://github.com/ARTTTT-TTTT/jenkins.git']]])
+                    }
+                }
                 sh 'echo "=== FILES AFTER CHECKOUT ==="; ls -la'
             }
         }

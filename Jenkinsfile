@@ -10,27 +10,26 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                // Use the pipeline's configured SCM (avoids hardcoding a branch that may not exist)
-                checkout scm
+                git branch: 'feature', url: 'https://github.com/ARTTTT-TTTT/jenkins.git'
                 sh 'echo "=== FILES AFTER CHECKOUT ==="; ls -la'
             }
         }
 
         stage('Run Tests & Coverage') {
+            agent {
+                docker {
+                    image 'python:3.11'
+                }
+            }
             steps {
-                // Create a test runner script in the workspace and execute it inside the python container.
-                // This avoids complex nested quoting and ensures the container sees the mounted files.
                 sh '''
                 echo "Running tests inside Docker container..."
-                cat > run_tests.sh <<'SCRIPT'
-                #!/bin/bash
-                set -e
+                python -m venv venv
+                . venv/bin/activate
                 pip install --no-cache-dir -r requirements.txt
+                echo "Dependencies installed. Running tests..."
                 pytest --maxfail=1 --disable-warnings -q --cov=app --cov-report=xml
-                SCRIPT
-                chmod +x run_tests.sh
-                docker run --rm -v "${PWD}":/usr/src -w /usr/src python:3.11 /usr/src/run_tests.sh
-                echo "Tests completed."
+                echo "Tests completed successfully."
                 '''
             }
         }
@@ -50,15 +49,25 @@ pipeline {
         }
 
         stage('Build Docker Image') {
+            agent {
+                docker {
+                    image 'docker:19.03.13'
+                    args "-w /workspace -v ${pwd()}:/workspace -v /var/run/docker.sock:/var/run/docker.sock"
+                }
+            }
             steps {
-                // Build using the host Docker CLI. The Jenkins agent must have access to Docker.
                 sh 'docker build -t fastapi-clean-demo:latest .'
             }
         }
 
         stage('Deploy Container') {
+            agent {
+                docker {
+                    image 'docker:19.03.13'
+                    args "-w /workspace -v ${pwd()}:/workspace -v /var/run/docker.sock:/var/run/docker.sock"
+                }
+            }
             steps {
-                // Deploy using host Docker CLI
                 sh '''
                 docker stop fastapi_app || true
                 docker rm fastapi_app || true

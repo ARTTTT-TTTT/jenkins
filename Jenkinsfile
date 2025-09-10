@@ -1,8 +1,11 @@
 pipeline {
     agent any // This uses the main Jenkins agent for all general tasks
+    parameters {
+        string(name: 'HOST_PORT', defaultValue: '8001', description: 'Host port to bind the application')
+    }
     environment {
         APP_IMAGE = 'fastapi-clean-demo:latest'
-        HOST_PORT = credentials('app_host_port') ?: '8001'
+        HOST_PORT = "${params.HOST_PORT}"
         CONTAINER_PORT = '8000'
     }
     stages {

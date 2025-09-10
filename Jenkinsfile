@@ -70,14 +70,7 @@ pipeline {
                 }
             }
             steps {
-                                sh '''
-                                if ! command -v docker >/dev/null 2>&1; then
-                                    echo "ERROR: 'docker' CLI not found on this agent. Install Docker or run on an agent with Docker available."
-                                    exit 1
-                                fi
-                                echo "Building Docker image..."
-                                docker build -t fastapi-clean-demo:latest .
-                                '''
+                sh 'docker build -t fastapi-clean-demo:latest .'
             }
         }
 
@@ -89,21 +82,11 @@ pipeline {
                 }
             }
             steps {
-                                sh '''
-                                if ! command -v docker >/dev/null 2>&1; then
-                                    echo "ERROR: 'docker' CLI not found on this agent. Install Docker or use an agent with Docker access."
-                                    exit 1
-                                fi
-                                if ! docker info >/dev/null 2>&1; then
-                                    echo "ERROR: Docker daemon not accessible (docker info failed). Ensure the agent can access /var/run/docker.sock or has proper Docker-in-Docker setup."
-                                    docker --version || true
-                                    exit 1
-                                fi
-                                echo "Stopping existing container (if any) and starting new one..."
-                                docker stop fastapi_app || true
-                                docker rm fastapi_app || true
-                                docker run -d -p 8001:8000 --name fastapi_app fastapi-clean-demo:latest
-                                '''
+                sh '''
+                docker stop fastapi_app || true
+                docker rm fastapi_app || true
+                docker run -d -p 8001:8000 --name fastapi_app fastapi-clean-demo:latest
+                '''
             }
         }
     }

@@ -1,5 +1,10 @@
 pipeline {
     agent any // This uses the main Jenkins agent for all general tasks
+    environment {
+        APP_IMAGE = 'fastapi-clean-demo:latest'
+        HOST_PORT = credentials('app_host_port') ?: '8001'
+        CONTAINER_PORT = '8000'
+    }
     stages {
         stage('Clean Workspace') {
             steps {
@@ -82,11 +87,48 @@ pipeline {
                 }
             }
             steps {
+                // Use Docker-in-Docker style deploy: stop/remove old -> run new with env-driven ports
                 sh '''
                 docker stop fastapi_app || true
                 docker rm fastapi_app || true
-                docker run -d -p 8001:8000 --name fastapi_app fastapi-clean-demo:latest
+                docker run -d -p ${HOST_PORT}:${CONTAINER_PORT} --name fastapi_app ${APP_IMAGE}
+                docker ps -a --filter name=fastapi_app
                 '''
+            }
+        }
+
+        stage('SonarQube Quality Gate') {
+            steps {
+                // Wait for SonarQube analysis to compute Quality Gate and fail the build if it fails
+                withCredentials([string(credentialsId: 'sonarqube_token', variable: 'SONAR_TOKEN')]) {
+                    sh '''
+                    echo "Checking SonarQube Quality Gate..."
+                    # Use the SonarQube API to poll the task status produced by scanner
+                    TASK_URL=$(cat .scannerwork/report-task.txt | grep ceTaskUrl | cut -d'=' -f2 || true)
+                    if [ -z "$TASK_URL" ]; then
+                      echo "No SonarQube task URL found; skipping quality gate check."
+                      exit 0
+                    fi
+
+                    # Poll until the analysis is complete
+                    STATUS="PENDING"
+                    until [ "$STATUS" = "SUCCESS" ] || [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CANCELED" ]; do
+                      sleep 3
+                      STATUS=$(curl -s -u ${SONAR_TOKEN}: "$TASK_URL" | jq -r '.task.status')
+                      echo "Sonar task status: $STATUS"
+                    done
+
+                    # Get the project status (OK or ERROR)
+                    PROJECT_STATUS=$(curl -s -u ${SONAR_TOKEN}: "$TASK_URL" | jq -r '.task.analysisId' | xargs -I {} curl -s -u ${SONAR_TOKEN}: "${SONAR_HOST_URL:-http://host.docker.internal:9000}/api/qualitygates/project_status?analysisId={}" )
+                    echo "$PROJECT_STATUS" | jq .
+                    GATE_RESULT=$(echo "$PROJECT_STATUS" | jq -r '.projectStatus.status')
+                    if [ "$GATE_RESULT" != "OK" ]; then
+                      echo "Quality Gate failed: $GATE_RESULT"
+                      exit 1
+                    fi
+                    echo "Quality Gate passed: $GATE_RESULT"
+                    '''
+                }
             }
         }
     }

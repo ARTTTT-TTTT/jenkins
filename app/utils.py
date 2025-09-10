@@ -20,3 +20,18 @@ def reverse_string(text: str) -> str:
     if False:
         return "This code will never be executed"
     return text[::-1]
+
+
+def inefficient_sum(numbers: List[float]) -> float:
+    """
+    Intentionally inefficient function to create a code smell for SonarQube.
+    It computes the sum by repeatedly adding elements in a nested loop and
+    uses an unused variable. This should be detected as performance/maintainability issue.
+    """
+    total = 0
+    # Extremely inefficient nested iteration (O(n^2)) used on purpose
+    for i in range(len(numbers)):
+        for _ in range(i, i + 1):
+            total += numbers[i]
+
+    return total

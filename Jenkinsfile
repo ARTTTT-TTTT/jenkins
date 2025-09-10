@@ -45,17 +45,21 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    withCredentials([string(credentialsId: 'sonarqube_token', variable: 'SCANNER_TOKEN')]) {
-                        sh '''
-                        echo "SUCCESS: SCANNER_TOKEN is set."
-                        export SONAR_TOKEN="${SCANNER_TOKEN}"
-                        /var/jenkins_home/workspace/FastAPI-Clean-Demo@2/sonar-scanner/bin/sonar-scanner -Dsonar.host.url="${SONAR_HOST_URL}"
-                        '''
-                    }
-                }
-            }
+                        steps {
+                                // Run sonar-scanner inside the official SonarScanner Docker image.
+                                // This avoids needing the SonarQube Jenkins plugin or a configured Sonar installation.
+                                withCredentials([string(credentialsId: 'sonarqube_token', variable: 'SCANNER_TOKEN')]) {
+                                        sh '''
+                                        echo "Running SonarScanner in Docker..."
+                                        docker run --rm -v "${WORKSPACE}":/usr/src -w /usr/src sonarsource/sonar-scanner-cli:latest \
+                                            -Dsonar.projectKey=_6510110192 \
+                                            -Dsonar.sources=. \
+                                            -Dsonar.exclusions=**/*.java \
+                                            -Dsonar.host.url=http://host.docker.internal:9000 \
+                                            -Dsonar.login=${SCANNER_TOKEN}
+                                        '''
+                                }
+                        }
         }
 
         stage('Build Docker Image') {

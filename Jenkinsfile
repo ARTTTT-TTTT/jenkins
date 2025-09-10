@@ -18,10 +18,18 @@ pipeline {
 
         stage('Run Tests & Coverage') {
             steps {
-                // Run tests inside an ephemeral python container using the host Docker daemon.
+                // Create a test runner script in the workspace and execute it inside the python container.
+                // This avoids complex nested quoting and ensures the container sees the mounted files.
                 sh '''
                 echo "Running tests inside Docker container..."
-                docker run --rm -v "${PWD}":/usr/src -w /usr/src python:3.11 bash -lc "python -m venv venv && . venv/bin/activate && pip install --no-cache-dir -r requirements.txt && pytest --maxfail=1 --disable-warnings -q --cov=app --cov-report=xml"
+                cat > run_tests.sh <<'SCRIPT'
+                #!/bin/bash
+                set -e
+                pip install --no-cache-dir -r requirements.txt
+                pytest --maxfail=1 --disable-warnings -q --cov=app --cov-report=xml
+                SCRIPT
+                chmod +x run_tests.sh
+                docker run --rm -v "${PWD}":/usr/src -w /usr/src python:3.11 /usr/src/run_tests.sh
                 echo "Tests completed."
                 '''
             }
